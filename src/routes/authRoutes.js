@@ -1,12 +1,15 @@
 const express = require('express');
 const authController = require('../controllers/authController.js');
-import validate from '../middleware/validate.js';
+const validate = require('../middleware/validate.js');
+const { registerRules, loginRules } = require('../middleware/authValidation.js');
+const verifyJWT = require('../middleware/verifyJWT.js');
 
 const router = express.Router();
 
-router.post('/register',validate, authController.register);
-router.post('/login',validate, authController.login);
-router.post('/logout',validate, authController.logout);
-router.post('/refreshToken',validate, authController.refreshToken);
+router.post('/register', registerRules, validate, authController.register);
+router.post('/login', loginRules, validate, authController.login);
+router.post('/logout', authController.logout);
+router.post('/refreshToken', authController.refreshToken);
+router.get('/me', verifyJWT, authController.getMe);
 
 module.exports = router;
