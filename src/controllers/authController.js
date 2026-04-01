@@ -88,7 +88,7 @@ const refreshToken = async (req, res, next) => {
             expiresIn: process.env.ACCESS_TOKEN_EXPIRY,
         })
 
-        res.cookie('accessToken', accessToken, { httpOnly: true, secure: isProduction, sameSite: isProduction ? 'none' : 'lax', maxAge: process.env.ACCESS_TOKEN_EXPIRY });
+        res.cookie('accessToken', accessToken, { httpOnly: true, secure: isProduction, sameSite: isProduction ? 'none' : 'lax', maxAge: 15 * 60 * 1000 });
         return res.status(200).json({ message: 'Refresh token successful' });
     }
     catch (error) {
@@ -110,11 +110,36 @@ const getMe = async (req, res, next) => {
     }
 };
 
+const googleCallback = async (req, res, next) => {
+    try {
+        const user = req.user;
+        if (!user) {
+            next({ statusCode: 400, message: 'Invalid google callback' });
+            return;
+        }
+        const accessToken = await jwt.sign({ id: user._id }, process.env.ACCESS_TOKEN_SECRET, {
+            expiresIn: process.env.ACCESS_TOKEN_EXPIRY,
+        })
+        const refreshToken = await jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN_SECRET, {
+            expiresIn: process.env.REFRESH_TOKEN_EXPIRY,
+        })
+        user.refreshToken = refreshToken;
+        await user.save();
+        res.cookie('accessToken', accessToken, { httpOnly: true, secure: isProduction, sameSite: isProduction ? 'none' : 'lax', maxAge: 15 * 60 * 1000 });
+        res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: isProduction, sameSite: isProduction ? 'none' : 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
+        return res.redirect('http://localhost:5000/health');
+    }
+    catch (error) {
+        next({ statusCode: 500, message: 'Error logging in - ' + error.message });
+    }
+};
+
 module.exports = {
     register,
     login,
     logout,
     refreshToken,
     getMe,
+    googleCallback,
 };
 
