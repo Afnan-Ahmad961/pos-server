@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const verifyJWT = (req, res, next)=>{
     const accessToken = req.cookies.accessToken;
     if (!accessToken) {
-        next({ status: 401, message: 'Access token is required' });
+        next({ statusCode: 401, message: 'Access token is required' });
         return;
     }
     try {
@@ -12,7 +12,7 @@ const verifyJWT = (req, res, next)=>{
         next();
     }
     catch (error) {
-        next({ status: 401, message: 'Invalid access token' });
+        next({ statusCode: 401, message: 'Invalid access token' });
     }
 };
 

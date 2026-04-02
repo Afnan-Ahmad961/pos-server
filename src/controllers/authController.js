@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 
 const isProduction = process.env.NODE_ENV === 'production';
 
-const register = async (req, res, next)=>{
+const register = async (req, res, next) => {
     try {
         const { name, email, password, businessName } = req.body;
         const existingUser = await User.findOne({ email });
@@ -18,7 +18,7 @@ const register = async (req, res, next)=>{
     }
 };
 
-const login = async (req, res, next)=>{
+const login = async (req, res, next) => {
     try {
         const { email, password } = req.body;
         const user = await User.findOne({ email });
@@ -31,11 +31,11 @@ const login = async (req, res, next)=>{
             return;
         }
 
-        const accessToken = await jwt.sign({id: user._id}, process.env.ACCESS_TOKEN_SECRET, {
+        const accessToken = await jwt.sign({ id: user._id }, process.env.ACCESS_TOKEN_SECRET, {
             expiresIn: process.env.ACCESS_TOKEN_EXPIRY,
         })
 
-        const refreshToken = await jwt.sign({id: user._id}, process.env.REFRESH_TOKEN_SECRET, {
+        const refreshToken = await jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN_SECRET, {
             expiresIn: process.env.REFRESH_TOKEN_EXPIRY,
         })
         //Save the refresh token on the user document 
@@ -52,7 +52,7 @@ const login = async (req, res, next)=>{
     }
 };
 
-const logout = async (req, res, next)=>{
+const logout = async (req, res, next) => {
     try {
         const { refreshToken } = req.cookies;
         const user = await User.findOne({ refreshToken });
@@ -71,23 +71,66 @@ const logout = async (req, res, next)=>{
     }
 };
 
-const refreshToken = async (req, res, next)=>{
+const refreshToken = async (req, res, next) => {
     try {
-    const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
-    const user = await User.findOne({ _id: decoded.id });
-    if (!user) {
-        next({ statusCode: 400, message: 'Invalid refresh token' });
-        return;
+        const { refreshToken: token } = req.cookies;
+        if (!token) {
+            next({ statusCode: 400, message: 'Refresh token not found' });
+            return;
+        }
+        const decoded = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET);
+        const user = await User.findOne({ refreshToken: token });
+        if (!user) {
+            next({ statusCode: 400, message: 'Invalid refresh token' });
+            return;
+        }
+        const accessToken = await jwt.sign({ id: user._id }, process.env.ACCESS_TOKEN_SECRET, {
+            expiresIn: process.env.ACCESS_TOKEN_EXPIRY,
+        })
+
+        res.cookie('accessToken', accessToken, { httpOnly: true, secure: isProduction, sameSite: isProduction ? 'none' : 'lax', maxAge: 15 * 60 * 1000 });
+        return res.status(200).json({ message: 'Refresh token successful' });
     }
-    const accessToken = await jwt.sign({id: user._id}, process.env.ACCESS_TOKEN_SECRET, {
-        expiresIn: process.env.ACCESS_TOKEN_EXPIRY,
-    })
-    
-    res.cookie('accessToken', accessToken, { httpOnly: true, secure: isProduction, sameSite: isProduction ? 'none' : 'lax', maxAge: process.env.ACCESS_TOKEN_EXPIRY });
-    return res.status(200).json({ message: 'Refresh token successful' });
-}
     catch (error) {
         next({ statusCode: 500, message: 'Error refreshing token - ' + error.message });
+    }
+};
+
+const getMe = async (req, res, next) => {
+    try {
+        const user = await User.findById(req.user.id).select('-password -refreshToken');
+        if (!user) {
+            next({ statusCode: 404, message: 'User not found' });
+            return;
+        }
+        return res.status(200).json({ name: user.name, email: user.email });
+    }
+    catch (error) {
+        next({ statusCode: 500, message: 'Error getting user - ' + error.message });
+    }
+};
+
+const googleCallback = async (req, res, next) => {
+    try {
+        const user = req.user;
+        if (!user) {
+            next({ statusCode: 400, message: 'Invalid google callback' });
+            return;
+        }
+        const accessToken = await jwt.sign({ id: user._id }, process.env.ACCESS_TOKEN_SECRET, {
+            expiresIn: process.env.ACCESS_TOKEN_EXPIRY,
+        })
+        const refreshToken = await jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN_SECRET, {
+            expiresIn: process.env.REFRESH_TOKEN_EXPIRY,
+        })
+        user.refreshToken = refreshToken;
+        await user.save();
+        res.cookie('accessToken', accessToken, { httpOnly: true, secure: isProduction, sameSite: isProduction ? 'none' : 'lax', maxAge: 15 * 60 * 1000 });
+        res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: isProduction, sameSite: isProduction ? 'none' : 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
+        return res.redirect('http://localhost:5000/health');
+    }
+    catch (error) {
+        next({ statusCode: 500, message: 'Error logging in - ' + error.message });
     }
 };
 
@@ -96,5 +139,7 @@ module.exports = {
     login,
     logout,
     refreshToken,
+    getMe,
+    googleCallback,
 };
 
