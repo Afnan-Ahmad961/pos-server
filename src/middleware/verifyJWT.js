@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
+const User = require('../models/User.js');
 
-const verifyJWT = (req, res, next)=>{
+const verifyJWT = async (req, res, next)=>{
     const accessToken = req.cookies.accessToken;
     if (!accessToken) {
         next({ statusCode: 401, message: 'Access token is required' });
@@ -8,11 +9,21 @@ const verifyJWT = (req, res, next)=>{
     }
     try {
         const decoded = jwt.verify(accessToken, process.env.ACCESS_TOKEN_SECRET);
-        req.user = decoded;
+        const user = await User.findById(decoded.id);
+        console.log(decoded);
+        if (!user) {
+            throw new ApiError(401, 'Invalid access token 1');
+        }
+        req.user = {
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            businessName: user.businessName,
+        };
         next();
     }
     catch (error) {
-        next({ statusCode: 401, message: 'Invalid access token' });
+        next({ statusCode: 401, message: error.message});
     }
 };
 
